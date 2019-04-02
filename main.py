@@ -9,7 +9,9 @@ from bs4 import BeautifulSoup
 def threat_crowd(domain):
     response = requests.get(
         "https://www.threatcrowd.org/searchApi/v2/domain/report/?domain={}".format(domain))
-    return set(response.json().get("subdomains"))
+    response_json = response.json()
+    emails = response_json.get("emails")
+    return set(response_json.get("subdomains") + [email.split("@")[-1].strip() for email in emails])
 
 
 def virus_total(domain):
@@ -62,7 +64,7 @@ class Domain(object):
         # Check if valid
         if not self.valid:
             Resolver = dns.resolver.Resolver()
-            Resolver.nameservers = ["8.8.8.8", "8.8.4.4", "1.1.1.1"]
+            Resolver.nameservers = ["8.8.8.8", "8.8.4.4", "1.1.1.1"] # Some networks block custom nameservers
             try:
                 ip = Resolver.query(self.name, "A")[0].to_text()
             except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
