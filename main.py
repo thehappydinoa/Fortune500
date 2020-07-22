@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
 from urllib.parse import urlsplit
+from typing import Iterable
 
 import dns.resolver
 import requests
 from bs4 import BeautifulSoup
 
 
-def threat_crowd(domain):
+def threat_crowd(domain: str):
     response = requests.get(
-        "https://www.threatcrowd.org/searchApi/v2/domain/report/?domain={}".format(domain))
+        f"https://www.threatcrowd.org/searchApi/v2/domain/report/?domain={domain}"
+    )
     response_json = response.json()
     emails = response_json.get("emails")
-    return set(response_json.get("subdomains") + [email.split("@")[-1].strip() for email in emails])
+    return set(
+        response_json.get("subdomains")
+        + [email.split("@")[-1].strip() for email in emails]
+    )
 
 
-def virus_total(domain):
+def virus_total(domain: str):
     response = requests.get(
-        "https://www.virustotal.com/en/domain/{}/information/".format(domain))
+        f"https://www.virustotal.com/en/domain/{domain}/information/"
+    )
     soup = BeautifulSoup(response.content, features="html.parser")
     subdomains_html = soup.find(id="observed-subdomains")
     if subdomains_html:
@@ -25,8 +31,8 @@ def virus_total(domain):
     return set()
 
 
-def crt_sh(domain):
-    response = requests.get("https://crt.sh/?q=%25.{}".format(domain))
+def crt_sh(domain: str):
+    response = requests.get(f"https://crt.sh/?q=%25.{domain}")
     soup = BeautifulSoup(response.content, features="html.parser")
     if not soup.find("i"):
         tables = soup.find_all("table")
@@ -37,7 +43,7 @@ def crt_sh(domain):
             identity = tr.find_all("td")
             if identity:
                 domain = identity[4].contents[0]
-                if not "*" in domain:
+                if "*" not in domain:
                     subdomains.add(domain)
         return subdomains
     return set()
@@ -46,13 +52,13 @@ def crt_sh(domain):
 class Domain(object):
     """Domain class"""
 
-    def __init__(self, name):
-        self.name = name.lower().replace("www.", "")
-        self.subdomains = set()
-        self.valid = False
-        self.mail_server = False
+    def __init__(self, name: str):
+        self.name: str = name.lower().replace("www.", "")
+        self.subdomains: set = set()
+        self.valid: bool = False
+        self.mail_server: bool = False
 
-        self.subdomain_finders = [threat_crowd, virus_total, crt_sh]
+        self.subdomain_finders: list = [threat_crowd, virus_total, crt_sh]
 
     def __str__(self):
         return self.name
@@ -64,7 +70,11 @@ class Domain(object):
         # Check if valid
         if not self.valid:
             Resolver = dns.resolver.Resolver()
-            Resolver.nameservers = ["8.8.8.8", "8.8.4.4", "1.1.1.1"] # Some networks block custom nameservers
+            Resolver.nameservers = [
+                "8.8.8.8",
+                "8.8.4.4",
+                "1.1.1.1",
+            ]  # Some networks block custom nameservers
             try:
                 ip = Resolver.query(self.name, "A")[0].to_text()
             except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
@@ -77,11 +87,14 @@ class Domain(object):
         if not self.mail_server:
             try:
                 records = dns.resolver.query(self.name, "MX")
-                mx_records = [Domain(str(record.exchange))
-                              for record in records]
+                mx_records = [Domain(str(record.exchange)) for record in records]
                 self.subdomains.union(set(mx_records))
                 self.mail_server = True
-            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers):
+            except (
+                dns.resolver.NXDOMAIN,
+                dns.resolver.NoAnswer,
+                dns.resolver.NoNameservers,
+            ):
                 self.mail_server = False
         return self.mail_server
 
@@ -98,11 +111,11 @@ class Domain(object):
         return self.subdomains
 
 
-def get_domain(url):
+def get_domain(url: str):
     return urlsplit(url).netloc
 
 
-def find_mail_servers(domains):
+def find_mail_servers(domains: Iterable):
     mail_servers = set()
 
     try:
@@ -129,8 +142,10 @@ def main():
     FORTUNE_500_JSON = "https://opendata.arcgis.com/datasets/a4d813c396934fc09d0b801a0c491852_0.geojson"
 
     response = requests.get(FORTUNE_500_JSON).json()
-    domains = [Domain(get_domain(d.get("properties").get("WEBSITE")))
-               for d in response.get("features")]
+    domains = [
+        Domain(get_domain(d.get("properties").get("WEBSITE")))
+        for d in response.get("features")
+    ]
 
     # with open("input.txt", "r") as input:
     #     domains = [Domain(d.strip()) for d in input.readlines()]
